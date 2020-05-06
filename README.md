@@ -2,10 +2,6 @@
 Self-Driving Car Engineer Nanodegree Program  
 Simulator and track used by default: https://github.com/udacity/Bosch-Challenge/releases/tag/v2.0  
 (cf params.cpp to use different tracks with the same Unity3D based simulator)  
-
-Coding rules:  
-* https://github.com/Microsoft/AirSim/blob/master/docs/coding_guidelines.md  
-* https://google.github.io/styleguide/cppguide.html  
   
 Latest additions:  
 * Safety Distances:   

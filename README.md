@@ -1,20 +1,5 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program  
-Simulator and track used by default: https://github.com/udacity/Bosch-Challenge/releases/tag/v2.0  
-(cf params.cpp to use different tracks with the same Unity3D based simulator)  
-  
-Latest additions:  
-* Safety Distances:   
-   https://www.engadget.com/2017/10/17/intel-mobileye-autonomous-vehicle-safety/  
-   https://arxiv.org/pdf/1708.06374.pdf  
-   Current lane + lane changes  
-  
-* Trajectory generation: emergency trajectory in Frenet  
-  Generate trajectory point by point (with max accel/decel) in Frenet coordinates  
-
-* Collision detections:  
-  Use SAT (Separating Axis Theorem) method cf http://www.dyn4j.org/2010/01/sat/
-
 
 [//]: # (Image References)
 [image1]: ./img/behavior.png
@@ -70,61 +55,15 @@ The main reference for the below implementation is the following paper:
      <br>overview.png
 </p>
 
-In the code excerpt below we do the following:
+We do the following:
 * **generate predictions:** based on sensor fusion information, we locate for every lane the closest car in front and behind the ego vehicle. This provides a sort of basic scene detection or summary. For these objects, we extrapolate the trajectories up to a specific horizon (typically 1 second)  
 * **the behavior planner defines candidate targets**: a set of candidate {target_lane, target_speed, target_time for maneuver }
 * **for every candidate targets a trajectory is computed**
 * **for every candidate trajectories a cost is computed**
 * **the trajectory with the lowest cost is chosen**  
-  
 
-```cpp
-     // --------------------------------------------------------------------------
-     // --- 6 car predictions x 50 points x 2 coord (x,y): 6 objects predicted over 1 second horizon ---
-     Predictions predictions = Predictions(sensor_fusion, car, PARAM_NB_POINTS /* 50 */);
-
-     Behavior behavior = Behavior(sensor_fusion, car);
-     vector<Target> targets = behavior.get_targets();
-     
-     Trajectory trajectory = Trajectory(targets, map, car, previous_path, predictions);
-```
-
-```cpp
-Trajectory::Trajectory(vector<Target> targets, Map &map, CarData &car, PreviousPath &previous_path, Predictions &predictions) {
-  for (size_t i = 0; i < targets.size(); i++) {
-    TrajectoryXY trajectory;
-    if (PARAM_TRAJECTORY_JMT) {
-      TrajectoryJMT traj_jmt;
-  
-      // generate JMT trajectory in s and d: converted then to (x,y) for trajectory output
-      traj_jmt = generate_trajectory_jmt(targets[i], map, previous_path);
-      trajectory = traj_jmt.trajectory;
-      trajectories_sd_.push_back(traj_jmt.path_sd);
-    } else {
-      // generate SPLINE trajectory in x and y
-      trajectory = generate_trajectory(targets[i], map, car, previous_path);
-    }
-  
-    Cost cost = Cost(trajectory, targets[i], predictions, car.lane);
-    costs_.push_back(cost);
-    trajectories_.push_back(trajectory);
-  }
-  
-  // --- retrieve the lowest cost trajectory ---
-  min_cost_ = INF;
-  min_cost_index_ = 0;
-  for (size_t i = 0; i < costs_.size(); i++) {
-    if (costs_[i].get_cost() < min_cost_) {
-      min_cost_ = costs_[i].get_cost();
-      min_cost_index_ = i;
-    }
-  }
-}
-```
 
 ### Coordinate transforms
-
-cf map.cpp  
 
 Most of the work and reflection is done in the Frenet space where the longitudinal s(t) and lateral d(t) trajectories of the vehicle are tracked with respect to a reference curve which is provided by a map (or a reference curve; e.g. middle of the road; provided at runtime in case there would be no map-based localization module).
 
@@ -149,29 +88,13 @@ We are provided with y(t), s(t) and compute a y(s) slpine.
 We are provided with dx(t), s(t) and compute a dx(s) spline.  
 We are provided with dy(t), s(t) and compute a dy(s) slpine.  
 dx and dy rekate to x and y component of the normal vector (misleading names ...)  
-From there doing a (s, d) -> (x, y) conversion is very simple: cf code below.   
-
-```cpp
-vector<double> Map::getXYspline(double s, double d)
-{
-     s = fmod(s, max_s);
-     double x = spline_x(s) + d * spline_dx(s);
-     double y = spline_y(s) + d * spline_dy(s);
-
-     return {x,y};
-}
-```
-
-Two fixes were done in the NextWaypoint code which had some issues at s wraparound:  
-https://waffle.io/udacity/sdc-issue-reports/cards/59e8ee756ff7e100813ad856  
+From there doing a (s, d) -> (x, y) conversion is very simple
 
 While driving a full track it can be checked now that the conversions error (x, y) -> (s, d) -> (x, y) are now on average around 0.6 meters (with a peak at 1.2 meters) which is well below the initial more than 10 meters error. I think this is probably the main reason why most of Udacity students reported issues while trying to work with JMT (s, d) frenet trajectories generations and finally went back to generate spline X, Y trajectories: where the dependency on the conversion functions is much lower.  
 
 As a final note, I am wondering if the accuracy of the conversions could be further improved, but the fact that the map is  provided as a discrete set of 30 meters spaced points may prevent us for getting a perfect accuracy when doing frenet <-> cartesian conversions.    
 
 ### Predictions
-
-cf prediction.cpp  
 
 First we look for the closest objects: the car just in front of the ego vehicle and the car just behind the ego vehicle for every lane; assuming a Field Of View of 70 meters, front and back (which is a configurable parameter). So this provides a sort of scene summary with at most 6 surrounding cars: as we are dealing with 3 lanes here.  
 Thanks to the sensor fusion information, a speed estimate is provided and used to compute the future positions of these (at most) 6 objects up to an horizon of typically 1 second.  
@@ -186,8 +109,6 @@ These predictions will be used later on to check for potential collisions and sa
 </p>
 
 ### Behavior planner
-
-cf behavior.cpp  
 
 In this implementation the behavior planner will provide a list of candidate targets rather than a single suggested maneuver.
 The first possible target will relate to adjusting the speed in our lane and keeping basically a rather big 30 meters distance with the vehicule in front of us; we end up driving at the same speed, 30 meters behind the vehicule in front of us.  
@@ -205,8 +126,6 @@ Later on a trajectory for every possible target wil be computed and they will be
 
 
 ### Trajectories generation
-
-cf trajectory.cpp  
 
 The trajectories can be generated in 2 different ways:
 * in (x, y) coordinates by using spline functions.
@@ -263,52 +182,7 @@ For the longitudinal s(t) trajectory we define as end conditions:
 * sf_dot: final speed corresponding to our target speed
 * sf = si + sf_dot * T: where T is set to 2 seconds. We do not want to spend too much time while doing the maneuver.
   
-Note that in theory there is a conversion to do from cartesian speed to longitudinal speed: that is why a getSpeedToFrenet function is provided for the conversion. But in practice for now on (in the real code, not the excerpt below), I am using a simple hard coded heuristic to do the conversion with some safety margin. Typically sf_dot is set to 98% of the target cartesian speed. This is a point left for further investigation and improvement. The conversion ratio between cartesian speed and frenet s speed should take into account the curvature and d distance (how far away we are from the reference curve).    
-
-
-```cpp
-  double T = target_time; // 2 seconds if car_d center of line
-
-  // si si_dot si_ddot: to be retieved
-  double si = prev_path_s[last_point][0];
-  double si_dot = prev_path_s[last_point][1];
-  double si_ddot = prev_path_s[last_point][2];
-
-  double di = prev_path_d[last_point][0];
-  double di_dot = prev_path_d[last_point][1];
-  double di_ddot = prev_path_d[last_point][2];
-
-  double sf, sf_dot, sf_ddot;
-  double df, df_dot, df_ddot;
-
-  if (target_vel <= 10) // mph
-  {
-    // special handling at low speed: cf werling paper
-    df = di;
-    df_dot = 0;
-    df_ddot = 0;
-
-    sf_ddot = 0;
-    sf_dot = mph_to_ms(target_vel);
-    sf = si + 2 * sf_dot * T;
-  }
-  else
-  {
-    df = get_dcenter(target_lane);
-    df_dot = 0;
-    df_ddot = 0;
-
-    sf_ddot = 0;
-    sf_dot = mph_to_ms(target_vel);
-    sf = si + sf_dot * T;
-  }
-
-  vector<double> start_s = { si, si_dot, si_ddot};
-  vector<double> end_s = { sf, sf_dot, 0};
-
-  vector<double> start_d = { di, di_dot, di_ddot };
-  vector<double> end_d = { df, df_dot, df_ddot};
-```
+Note that in theory there is a conversion to do from cartesian speed to longitudinal speed: that is why a getSpeedToFrenet function is provided for the conversion. But in practice for now on, I am using a simple hard coded heuristic to do the conversion with some safety margin. Typically sf_dot is set to 98% of the target cartesian speed. This is a point left for further investigation and improvement. The conversion ratio between cartesian speed and frenet s speed should take into account the curvature and d distance (how far away we are from the reference curve).    
 
 So now the problem is well defined. We have:
 * a target Jerk Minimizing Trajectory that is a quintic polynomial (for s(t) and d(t))
@@ -316,58 +190,18 @@ So now the problem is well defined. We have:
 * 6 equations defined via the definition of start and end conditions
 * T: the time duration of the trajectory properly defined. So the trajectory starts at t_start=0 and the endpoint is at t_end=T
 
-From now on, we just have to solve the equations i.e. do a matrix inversion to derive our 6 unknown coefficients. This is done in the **JMT** polynomial solver described below: diagram and code.  
+From now on, we just have to solve the equations i.e. do a matrix inversion to derive our 6 unknown coefficients. This is done in the **JMT** polynomial solver described below: 
 
 
 <p align="center">
      <img src="./img/jmt_solver.png" alt="pipeline" width="50%" height="50%">
      <br>jmt_conditions.png
 </p>
-
-```cpp
-vector<double> JMT(vector< double> start, vector <double> end, double T)
-{
-    /*
-    Calculate the Jerk Minimizing Trajectory that connects the initial state
-    to the final state in time T.
-
-    INPUTS
-    start - the vehicles start location given as a length three array
-            corresponding to initial values of [s, s_dot, s_double_dot]
-    end   - the desired end state for vehicle. Like "start" this is a
-            length three array.
-    T     - The duration, in seconds, over which this maneuver should occur.
-
-    OUTPUT 
-    an array of length 6, each value corresponding to a coefficent in the polynomial 
-    s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
-    */
-
-    MatrixXd A(3,3);
-    VectorXd b(3);
-    VectorXd x(3);
-
-    A <<   pow(T,3),    pow(T,4),    pow(T,5),
-         3*pow(T,2),  4*pow(T,3),  5*pow(T,4),
-                6*T, 12*pow(T,2), 20*pow(T,3);
-
-    b << end[0] - (start[0] + start[1]*T + 0.5*start[2]*T*T), 
-         end[1] - (start[1] + start[2]*T), 
-         end[2] - start[2];
-
-    x = A.inverse() * b;
-
-    return {start[0], start[1], start[2]/2, x[0], x[1], x[2]};
-}
-```
-
   
 Once the s(t) and d(t) have been found for the trajectory, we convert back to (x, y) coordinates using the accurate getXYspline function: we want to check speeed and acceleration in cartesian coordinates.  
 Also we have predictions from sensor fusion informations that are in (x, y) coordinates: so ultimately we check collision avoidance and safety distances in (x, y) coordinates.  
 
 ### Trajectories cost ranking
-
-cf cost.cp  
 
 Trajectories are ranked against a cost function. The cost function is decomposed into several sub-cost functions.  
 By decreasing order of importance, corresponding to decreasing cost weights, we can list:
@@ -395,72 +229,6 @@ As a summary, with the current implementation we end up ranking up to 9 candidat
      <img src="./img/trajectories.png" alt="pipeline" width="50%" height="50%">
      <br>trajectories.png
 </p>
-
-```cpp
-double cost_function(vector<vector<double>> &trajectory, int target_lane, double target_vel, std::map<int, vector<vector<double>>> &predictions, vector<vector<double>> &sensor_fusion, int car_lane)
-{
-  double cost = 0; // lower cost preferred
-
-  double cost_feasibility = 0; // vs collisions, vs vehicle capabilities
-  double cost_safety = 0; // vs buffer distance, vs visibility
-  double cost_legality = 0; // vs speed limits
-  double cost_comfort = 0; // vs jerk
-  double cost_efficiency = 0; // vs desired lane and time to goal
-
-  double weight_feasibility = 100000; // vs collisions, vs vehicle capabilities
-  double weight_safety      = 10000; // vs buffer distance, vs visibility or curvature
-  double weight_legality    = 1000; // vs speed limits
-  double weight_comfort     = 100; // vs jerk
-  double weight_efficiency  = 10; // vs target lane, target speed and time to goal
-
-  // 1) FEASIBILITY cost
-  if (check_collision(trajectory, predictions)) cost_feasibility += 10;
-  if (check_max_capabilities(trajectory)) cost_feasibility += 1;
-  cost = cost + weight_feasibility * cost_feasibility;
-
-  // 2) SAFETY cost
-  double dmin = get_predicted_dmin(trajectory, predictions);
-  if (dmin < param_dist_safety) cost_safety = param_dist_safety - dmin;
-  cost = cost + weight_safety * cost_safety;
-   
-   ...
-
-  return cost;
-}
-```
-
-### Configurable parameters
-
-cf params.h and params.cpp  
-
-The configurable parameters are:
-
-* map: different maps or tracks can be used if needed.
-* const int param_nb_points = 50; // the trajectory is generated over 50 points (so 1 second typically)
-* const double param_dt = 0.02; // 1 point every 0.02 s
-* const double param_lane_width = 4.0; // meters
-  
-* const double param_max_speed = 22; // m.s-1
-* const double param_max_accel = 10; // m.s-2
-* const double param_max_jerk  = 10; // m.s-3 average jerk over 1 second
-
-* const double param_fov = 70.0; // Field Of View
-
-* const double param_max_speed_inc = param_max_accel * param_dt; // m.s-1 per 0.02 sec
-
-* const double param_dist_slow_down = 30; // when a car is 30 m ahead of us => adjust speed to this car
-* const double param_dist_safety = 3.5; // meters
-* const double param_dist_collision = 2.75; // meters
-  
-// reduce latency reaction, but account for simulator latency ...  
-// usualy 3 points consumed by simulator + 5 points margin (the simulator is still consuming new points)  
-// => usually we are regenerating a new trajectory every 8 points (i.e. every 160 ms)  
-  
-// it is the number of points kept in previous_path_x and previous_path_y. All other points will be re computed  
-* const int param_truncated_prev_size = 5; 
-
-// we can generate trajectories by using 2 different methods
-* const bool param_trajectory_jmt = true;
 
 ### Conclusion and next steps
   

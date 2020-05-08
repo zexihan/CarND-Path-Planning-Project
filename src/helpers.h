@@ -9,6 +9,12 @@
 using std::string;
 using std::vector;
 
+
+// unnamed namespace only because the implementation is in this
+// header file and we don't want to export symbols to the obj files
+namespace
+{
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 //   else the empty string "" will be returned.
@@ -23,8 +29,6 @@ string hasData(string s) {
   }
   return "";
 }
-
-//
 // Helper functions related to waypoints and converting from XY to Frenet
 //   or vice versa
 //
@@ -153,5 +157,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 
   return {x,y};
 }
+
+} // namespace
 
 #endif  // HELPERS_H
